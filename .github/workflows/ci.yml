@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests (ROM tests are skipped without the ROM)
+        working-directory: tests
+        run: python -m unittest -v
+
+  generate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        archipelago: ["0.6.7", "0.6.8"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check out Archipelago ${{ matrix.archipelago }}
+        run: git clone --quiet --depth 1 --branch "${{ matrix.archipelago }}" https://github.com/ArchipelagoMW/Archipelago.git ap
+      - name: Install Archipelago with only this world
+        working-directory: ap
+        run: |
+          # Other worlds aren't needed, and their requirements would slow the install down
+          find worlds -mindepth 1 -maxdepth 1 -type d ! -name generic ! -name _bizhawk -exec rm -rf {} +
+          rm -f worlds/*.apworld
+          cp -r ../chocobo_tales worlds/
+          python -m pip install --quiet -r requirements.txt "setuptools<81"
+          python ModuleUpdate.py --yes
+      - name: Generate every preset, alone and together
+        working-directory: ap
+        env:
+          XDG_DATA_HOME: ${{ runner.temp }}/xdg
+        run: |
+          for preset in ../presets/*.yaml; do
+            rm -rf players && mkdir players && cp "$preset" players/
+            for seed in 1 2 3; do
+              python Generate.py --player_files_path players --outputpath output --seed "$seed" --spoiler 2
+            done
+          done
+          rm -rf players && mkdir players && cp ../presets/*.yaml players/
+          python Generate.py --player_files_path players --outputpath output --seed 1 --spoiler 2
+          # Each generation must have written one .apcts per Chocobo Tales player
+          for zip in output/*.zip; do unzip -l "$zip" | grep -q '\.apcts$' || { echo "no .apcts in $zip"; exit 1; }; done

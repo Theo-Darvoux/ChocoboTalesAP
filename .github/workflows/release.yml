@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match world_version
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("chocobo_tales/archipelago.json"))["world_version"])')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match world_version $version in chocobo_tales/archipelago.json"
+            exit 1
+          fi
+          grep -q "^## $version\$" CHANGELOG.md || { echo "CHANGELOG.md has no '## $version' section"; exit 1; }
+
+  tests:
+    needs: check-version
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the apworld
+        run: ./build.sh --package-only
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v heading="## $version" '$0 == heading {found = 1; next} found && /^## / {exit} found' CHANGELOG.md > notes.md
+          cat >> notes.md <<'NOTES'
+
+          ### Installing
+
+          Download `chocobo_tales.apworld` and double-click it (or use **Install APWorld** in the Archipelago Launcher),
+          then pick one of the YAML presets below. Full guide:
+          [English](https://github.com/Theo-Darvoux/ChocoboTalesAP/blob/main/chocobo_tales/docs/setup_en.md) ·
+          [Français](https://github.com/Theo-Darvoux/ChocoboTalesAP/blob/main/chocobo_tales/docs/setup_fr.md)
+          NOTES
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          # Tags like v1.0.0-beta1 are prereleases; releases/latest skips them
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" $prerelease \
+            --title "Chocobo Tales $GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            chocobo_tales.apworld presets/*.yaml

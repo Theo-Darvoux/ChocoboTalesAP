@@ -1,0 +1,37 @@
+# Chocobo Tales: the standard game, every card is its own item.
+# Copy one preset to Archipelago's Players folder, set your name, and change the options to taste.
+# These are the apworld's default values. 214 checks, about a third of them filler.
+name: Player{number}
+game: Chocobo Tales
+description: Chocobo Tales, standard settings
+
+Chocobo Tales:
+  progression_balancing: 50
+  accessibility: full
+
+  # story_complete: beat the story (the ending plays after the last Bebuzzu duel).
+  # chocobo_rescue, card_collection, storybook_goals, gold_medals: reach the count set below.
+  goal: story_complete
+  chocobos_required: 12          # 1-15, for chocobo_rescue
+  cards_required: 100            # 1-127, for card_collection; counts the cards inside packs
+  storybook_goals_required: 50   # 1-112, for storybook_goals; at most the enabled storybook checks
+  gold_medals_required: 15       # 1-23, for gold_medals
+
+  # Duels after the tutorial need a 15-card deck. Logic expects this many more cards per later chapter.
+  cards_per_chapter: 4           # 0-15
+  starting_cards: 15             # 0-40; below 15, chapter 1 is mostly a hunt for cards
+  starting_chocobos: 0           # 0-15
+  open_storybook_modes: false    # true: start with every storybook's battle and trial modes
+
+  # Items
+  card_packs: false              # true: 26 monster Card Packs instead of 127 cards
+  shuffle_epilogues: false       # true: 48 storybook epilogues become items
+
+  # Checks
+  storybook_goals_per_book: 7    # 2-7: 32-112 storybook checks
+  microgame_medals: both         # both: 46 checks; silver or gold: 23
+  field_card_checks: true        # 9 checks
+  chocobo_rescue_checks: true    # 15 checks
+  card_gift_checks: true         # 27 checks; logic only expects them after the ending
+  duel_s_rank_checks: false      # 8 boss duel win checks
+  # The 5 chapter checks are always on.

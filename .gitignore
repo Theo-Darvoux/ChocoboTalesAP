@@ -1,0 +1,19 @@
+# Built apworld (published on GitHub Releases instead)
+*.apworld
+dist/
+
+# Local research: ROMs, savestates, saves, emulator config, screenshots
+research/
+
+# Never commit game data
+*.nds
+*.apcts
+*.State
+*.SaveRAM
+*.SaveRAM.bak
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
