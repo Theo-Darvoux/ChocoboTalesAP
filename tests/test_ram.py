@@ -10,7 +10,10 @@ class TestRam(unittest.TestCase):
     def test_story_order_from_skip_scripts(self):
         self.assertEqual(world.data.STORYBOOK_STORY_CHAPTER[1], 1)
         self.assertEqual(world.data.STORYBOOK_STORY_CHAPTER[5], 2)
-        self.assertEqual(sorted(b for b, c in world.data.STORYBOOK_STORY_CHAPTER.items() if c == 6), [14, 16])
+        # No storybook waits for chapter 6: books 14 and 16 (in no skip script) are chapter 5's
+        self.assertEqual(max(world.data.STORYBOOK_STORY_CHAPTER.values()), 5)
+        self.assertEqual(world.data.STORYBOOK_STORY_CHAPTER[14], 5)
+        self.assertEqual(world.data.STORYBOOK_STORY_CHAPTER[16], 5)
 
     def test_every_location_and_item_has_flags(self):
         self.assertEqual(set(ram.LOCATION_FLAGS), set(world.locations.location_name_to_id.values()))

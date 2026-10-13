@@ -43,7 +43,7 @@ class StorybookGoalsRequired(Range):
     display_name = "Storybook Goals Required"
     range_start = 1
     range_end = 112
-    default = 75
+    default = 90
 
 
 class GoldMedalsRequired(Range):
@@ -140,8 +140,9 @@ class CardGiftChecks(Toggle):
     """
     Make each pop-up card the game gives outside storybooks and microgames a check: gifts from characters (the six
     Carbuncles, Peachie, Becky, Grinn, Bruce, ...), the four Typhon chests, the cards beaten duelists hand over and
-    the rewards for beating all four Pop-up Duel bosses and all four Bebuzzu duels (27 checks). Logic only expects
-    them after the ending, plus the rescued chocobo when the gift comes from one.
+    the rewards for beating all four Pop-up Duel bosses and all four Bebuzzu duels (27 checks). Logic expects each
+    in the chapter its giver appears, with the rescued chocobos and storybook epilogues it needs; the Bebuzzu
+    rematch reward (Karma+) comes after the ending.
     """
     display_name = "Card Gift Checks"
     default = 1

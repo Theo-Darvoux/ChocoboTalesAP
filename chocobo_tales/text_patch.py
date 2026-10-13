@@ -12,8 +12,9 @@ File formats (all found by reading the ROM, see NOTES.md):
 """
 import struct
 
-LANGUAGES = ("en", "fr", "de", "it", "es")
-# Index of each language in an .act text table; entries 0 and 6 are Japanese and are never shown in the EU game
+LANGUAGES = ("en", "fr", "de", "it", "es")  # the European release's; the USA release only has English
+# Index of each language in an .act text table; entries 0 and 6 are Japanese and are never shown in the EU game.
+# In the USA release, entries 2, 3 and 5 are unused French, German and Spanish leftovers, 0, 4 and 6 Japanese.
 ACT_LANGUAGE_INDEX = {"en": 1, "fr": 2, "de": 3, "it": 4, "es": 5}
 ACT_TEXT_ARG = 0x40
 # Opcodes whose type 0x40 arguments are text: 0x0B message, 0x24 three-way choice. (A condition's expression
@@ -61,11 +62,16 @@ class ActScript:
         self.data += text.encode("utf-8") + b"\0"
         return offset
 
-    def set_text(self, table: int, texts: dict[str, str]) -> None:
-        """Points the table's entries for these languages at new strings (English also replaces Japanese)."""
+    def set_text(self, table: int, texts: dict[str, str], every_entry: bool = False) -> None:
+        """
+        Points the table's entries for these languages at new strings (English also replaces Japanese). every_entry:
+        English replaces all seven entries, for a release with no other language.
+        """
         for language, text in texts.items():
             offset = self._append_string(text)
             indices = [ACT_LANGUAGE_INDEX[language]] + ([0, 6] if language == "en" else [])
+            if every_entry and language == "en":
+                indices = list(range(7))
             for index in indices:
                 struct.pack_into("<I", self.data, self.base + table + 4 * index, offset)
 

@@ -34,10 +34,17 @@ _spec.loader.exec_module(text_patch)
 
 # Each storybook has a block of 32 flags at 0x7C0 + 32 * (book - 1); +0x23 is set once the book is available
 STORYBOOK_AVAILABLE_FLAG = 0x7E3
-# Skip scripts in story order, with the chapter a storybook first seen in that script belongs to.
-# skip2 is the start of chapter 2, so its books were found in chapter 1; skipN / skipNpb (pre-boss) are chapter N.
-SKIP_SCRIPTS = [("skip2", 1), ("skip2pb", 2), ("skip3", 3), ("skip3pb", 3), ("skip4", 4), ("skip4pb", 4),
-                ("skip5", 5), ("skip5pb", 5)]
+# Developer skip scripts in story order, with the chapter whose storybooks they show. skipN is the state right after
+# chapter N - 1's Bebuzzu duel (it has that scene's story flags, e.g. 0x34 / 0x3F from 45/51/a3.act for skip3), so
+# its books were found in chapter N - 1; skipNpb is a point inside chapter N. Their chapter flags (0x43 + 2(N - 2))
+# aren't a reliable marker: skip3 / skip4 leave out the flag the boss scene sets, skip5 has it.
+# The boss tile's storybook proves the convention: Gimmick4B1 (book 8, skip3), Gimmick5B1 (book 10, skip4) and
+# Gimmick6B1 (book 12, skip5) each start the scene spawning the chapter's Bebuzzu duel.
+SKIP_SCRIPTS = [("skip2", 1), ("skip2pb", 2), ("skip3", 2), ("skip3pb", 3), ("skip4", 3), ("skip4pb", 4),
+                ("skip5", 4), ("skip5pb", 5)]
+# Storybooks no skip script makes available: book 14's book object (47/45 map.act) is created once Gimmick8A1
+# (book 15) sets flag 0x60, which skip5pb has; book 16's Gimmick8B1 starts the chapter 5 Bebuzzu scene (44/45/a1.act)
+FIELD_ONLY_BOOKS = {14: 5, 16: 5}
 LAST_CHAPTER = 6
 
 # Reward record types in /mgame/result/*/MGNNN.dat (see NOTES.md for the code that applies them)
@@ -194,13 +201,17 @@ def main(rom_path: str, out_path: str) -> None:
                 book = (flag - STORYBOOK_AVAILABLE_FLAG) // 32 + 1
                 if (flag - STORYBOOK_AVAILABLE_FLAG) % 32 == 0 and 1 <= book <= 16:
                     storybook_chapters.setdefault(book, chapter)
+    for book, chapter in FIELD_ONLY_BOOKS.items():
+        assert book not in storybook_chapters, book
+        storybook_chapters[book] = chapter
     for book in range(1, 17):
         storybook_chapters.setdefault(book, LAST_CHAPTER)
 
     chapters = {}
     for path in rom.files:
         if match := re.fullmatch(r"/bookread/txt/en/(\d+)-(\d+)-title\.txt\.z", path):
-            text = rom.read(path).decode("utf-8-sig").replace("\0", "").strip()
+            # EU stores UTF-16LE without a BOM; US adds the BOM. Decode both as UTF-16LE.
+            text = rom.read(path).removeprefix(b"\xff\xfe").decode("utf-16le").rstrip("\0").strip()
             chapters[(int(match.group(1)), int(match.group(2)))] = text
 
     grants = read_field_card_grants(rom)

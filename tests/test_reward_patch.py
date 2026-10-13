@@ -1,29 +1,32 @@
 """
-Tests the reward messages and the Archipelago card the ROM patch adds. Needs the vanilla ROM (CHOCOBO_TALES_ROM,
-default ~/Applications/ROMs/NDS/FFF_ChocoboTales_Europe.nds): cd tests && python3 -m unittest test_reward_patch
+Tests the reward messages and the Archipelago card the ROM patch adds, on each vanilla ROM found
+(load_world.ROM_PATHS): cd tests && python3 -m unittest test_reward_patch
 """
-import os
 import re
 import struct
 import unittest
-from pathlib import Path
 
-from load_world import load
+from load_world import load, read_rom
 
 world = load()
-ROM_PATH = Path(os.environ.get("CHOCOBO_TALES_ROM", Path.home() / "Applications/ROMs/NDS/FFF_ChocoboTales_Europe.nds"))
-LANGUAGES = world.text_patch.LANGUAGES
 
 
 def all_location_items() -> dict[int, str]:
     return {location: f"Item {location}" for location in world.locations.location_name_to_id.values()}
 
 
-@unittest.skipUnless(ROM_PATH.exists(), "vanilla ROM not found")
-class TestRewardPatch(unittest.TestCase):
+class RewardPatchTests:
+    GAME_CODE: str
+    LANGUAGES: tuple[str, ...]
+    CHECK_LANGUAGE: str  # the language whose texts the tests compare
+    FOUND: str
+    NOTHING: str
+
     @classmethod
     def setUpClass(cls):
-        cls.vanilla_bytes = ROM_PATH.read_bytes()
+        cls.vanilla_bytes = read_rom(cls.GAME_CODE)
+        if cls.vanilla_bytes is None:
+            raise unittest.SkipTest(f"vanilla {cls.GAME_CODE} ROM not found")
         cls.vanilla = world.nds.NDSRom(cls.vanilla_bytes)
         cls.items = all_location_items()
         cls.patched = world.nds.NDSRom(world.rom_patch.patch_rom(cls.vanilla_bytes, world.ram.BLOCKED_FLAGS, cls.items))
@@ -42,21 +45,21 @@ class TestRewardPatch(unittest.TestCase):
         for script, _, card, _, medal, _ in world.data.FIELD_CARD_GRANTS:
             location = world.rewards.field_grant_location(script, card, medal)
             act = world.text_patch.ActScript(self.patched.read(script))
-            texts = [act.text(table, language) for table in act.text_tables() for language in LANGUAGES]
+            texts = [act.text(table, language) for table in act.text_tables() for language in self.LANGUAGES]
             self.assertFalse([t for t in texts if re.search(r"\n\d{3} ", t) and "card" in t.lower()], script)
-            self.assertTrue(any(t.startswith("Objet trouvé :\n") and f"Item {location}" in t for t in texts),
+            self.assertTrue(any(t.startswith(self.FOUND + "\n") and f"Item {location}" in t for t in texts),
                             (script, card))
 
     def test_missing_locations_say_there_is_nothing(self):
         items = {location: item for location, item in self.items.items() if not 4000 <= location < 5000}
         rom = world.nds.NDSRom(world.rom_patch.patch_rom(self.vanilla_bytes, world.ram.BLOCKED_FLAGS, items))
         act = world.text_patch.ActScript(rom.read("/field/150/49/cardget.act"))
-        texts = [act.text(table, "fr") for table in act.text_tables()]
-        self.assertIn("(Il n'y a rien à obtenir ici.)", texts)
+        texts = [act.text(table, self.CHECK_LANGUAGE) for table in act.text_tables()]
+        self.assertIn(self.NOTHING, texts)
 
     def test_result_screens_only_keep_rewards_still_given(self):
         blocked = world.ram.BLOCKED_FLAGS | world.rom_patch.ALWAYS_BLOCKED
-        for language in LANGUAGES:
+        for language in self.LANGUAGES:
             for book in range(1, 17):
                 result = world.text_patch.ResultData(self.patched.read(f"/mgame/result/{language}/MG{book:03d}.dat.z"))
                 for goal in range(7):
@@ -75,7 +78,8 @@ class TestRewardPatch(unittest.TestCase):
         self.assertIn(world.reward_patch.FIRST_CLEAR_LEVELS, kinds)
 
     def test_goal_lists(self):
-        texts = world.text_patch.read_ptx(self.patched.read("/mgentryphase/text/de/secret/cl003.ptx"))
+        texts = world.text_patch.read_ptx(
+            self.patched.read(f"/mgentryphase/text/{self.CHECK_LANGUAGE}/secret/cl003.ptx"))
         self.assertEqual(len(texts), 7)
         self.assertTrue(all(text.startswith("\x1bC\x1bGItem 103") for text in texts))
 
@@ -86,7 +90,7 @@ class TestRewardPatch(unittest.TestCase):
         self.assertNotIn(b"card\\&\\card.bin.z", code)
 
     def test_archipelago_card_files(self):
-        for language in LANGUAGES:
+        for language in self.LANGUAGES:
             card_bin = self.patched.read(f"/card/{language}/apcd.bin.z")
             vanilla_bin = self.vanilla.read(f"/card/{language}/card.bin.z")
             count, table = struct.unpack_from("<II", card_bin, 0)
@@ -120,6 +124,33 @@ class TestRewardPatch(unittest.TestCase):
         self.assertTrue(lines[1].endswith("…"))
         self.assertTrue(all(font.width(line) <= 120 for line in lines))
         self.assertTrue(lines[0].startswith("Lódz"))
+
+
+class TestRewardPatchEurope(RewardPatchTests, unittest.TestCase):
+    GAME_CODE = "AEHP"
+    LANGUAGES = world.text_patch.LANGUAGES
+    CHECK_LANGUAGE = "fr"
+    FOUND = "Objet trouvé :"
+    NOTHING = "(Il n'y a rien à obtenir ici.)"
+
+
+class TestRewardPatchUSA(RewardPatchTests, unittest.TestCase):
+    GAME_CODE = "AEHE"
+    LANGUAGES = ("en",)
+    CHECK_LANGUAGE = "en"
+    FOUND = "Item found:"
+    NOTHING = "(There is nothing to obtain here.)"
+
+    def test_every_text_entry_is_replaced(self):
+        # The USA release has English only; its French, German and Spanish entries are leftovers
+        act = world.text_patch.ActScript(self.patched.read("/field/51/50/momo.act"))
+        table = next(table for table in act.text_tables()
+                     if act.text(table, "en").startswith(self.FOUND) and "Item " in act.text(table, "en"))
+        entries = struct.unpack_from("<7I", act.data, act.base + table)
+        self.assertEqual(len(set(entries)), 1)
+
+    def test_other_languages_are_absent(self):
+        self.assertFalse([path for path in self.patched.files if re.match(r"/(card|mgame/result)/(fr|de|it|es)/", path)])
 
 
 if __name__ == "__main__":

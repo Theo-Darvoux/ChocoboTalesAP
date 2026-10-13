@@ -55,8 +55,14 @@ MODE_ITEMS: dict[str, int] = {
 }
 MODE_ITEM_BOOKS: dict[str, int] = {name: item_id - 300 for name, item_id in MODE_ITEMS.items()}
 BOOK_MODE_ITEM: dict[int, str] = {book: name for name, book in MODE_ITEM_BOOKS.items()}
+
+
+def epilogue_item_name(book: int, epilogue: int) -> str:
+    return f"Storybook {book:02d} Epilogue {epilogue}"
+
+
 EPILOGUE_ITEMS: dict[str, int] = {
-    f"Storybook {book:02d} Epilogue {epilogue}": 500 + 3 * (book - 1) + epilogue
+    epilogue_item_name(book, epilogue): 500 + 3 * (book - 1) + epilogue
     for book in range(1, 17) for epilogue in range(1, 4)
 }
 

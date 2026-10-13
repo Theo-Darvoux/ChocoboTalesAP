@@ -1,5 +1,5 @@
 """
-Builds the Archipelago version of Final Fantasy Fables: Chocobo Tales (EU) from the vanilla ROM.
+Builds the Archipelago version of Final Fantasy Fables: Chocobo Tales (Europe or USA) from the vanilla ROM.
 No Archipelago imports, so it can be used and tested on its own.
 
 What changes:
@@ -15,13 +15,32 @@ What changes:
 """
 import struct
 from collections.abc import Iterable
+from typing import NamedTuple
 
 from . import ap_card, flags, hooks
 from .nds import NDSRom
 from .reward_patch import reward_patches
+from .text_patch import LANGUAGES
 
-VANILLA_MD5 = "a392490af90e31f2ce68d18b11833080"
-GAME_CODE = "AEHP"
+
+class Version(NamedTuple):
+    """What differs between the supported releases. Everything else (files, flags, scripts) is the same."""
+    region: str
+    md5: str
+    set_wrapper: int  # set(flag)
+    set_field_wrapper: int  # set_field(flag, width, value)
+    save_pointer: int  # global holding the save struct's address
+    languages: tuple[str, ...]  # text languages the release has
+
+
+VERSIONS: dict[str, Version] = {
+    "AEHP": Version("Europe", "a392490af90e31f2ce68d18b11833080", 0x02001BE8, 0x02001C4C, 0x0209DDE0, LANGUAGES),
+    # Same code shifted by 0x7C before the wrappers; English only (its .act text tables keep unused French, German
+    # and Spanish leftovers, and Japanese)
+    "AEHE": Version("USA", "06d12ca36fcd88c32c276affe792ae61", 0x02001B6C, 0x02001BD0, 0x0209DBF8, ("en",)),
+}
+VANILLA_MD5 = VERSIONS["AEHP"].md5  # the .apcts manifest's base checksum (informative only)
+VANILLA_MD5S = [version.md5 for version in VERSIONS.values()]
 
 AP_DATA_OFFSET = 0x1000
 AP_MAGIC = b"APCHOCO\x01"  # last byte: patch format version
@@ -30,8 +49,6 @@ SLOT_NAME_SIZE = 0x40
 
 ARM9_BASE = 0x02000000
 ITCM_BLOCK_SIZE = 0x260  # hook code at +0, blocked-flag bitmap (0x150 bytes) at +0x100
-SET_WRAPPER = 0x02001BE8
-SET_FIELD_WRAPPER = 0x02001C4C
 # First instructions of the wrappers in the vanilla game, checked before patching over them
 SET_WRAPPER_ORIGINAL = bytes.fromhex("10209fe50010a0e1")
 SET_FIELD_WRAPPER_ORIGINAL = bytes.fromhex("08402de91c309fe5")
@@ -55,7 +72,14 @@ def blocked_bitmap(blocked_flags: Iterable[int]) -> bytes:
     return bytes(bitmap)
 
 
+def rom_version(rom: NDSRom) -> Version:
+    if rom.game_code not in VERSIONS:
+        raise ValueError(f"expected Chocobo Tales Europe (AEHP) or USA (AEHE), got {rom.game_code}")
+    return VERSIONS[rom.game_code]
+
+
 def patch_arm9(rom: NDSRom, blocked_flags: Iterable[int]) -> bytes:
+    version = rom_version(rom)
     arm9 = bytearray(rom.arm9)  # decompressed, compressed_static_end already cleared
     params = rom.module_params
     if params is None:
@@ -64,9 +88,10 @@ def patch_arm9(rom: NDSRom, blocked_flags: Iterable[int]) -> bytes:
     def offset(address: int) -> int:
         return address - ARM9_BASE
 
-    for address, original in ((SET_WRAPPER, SET_WRAPPER_ORIGINAL), (SET_FIELD_WRAPPER, SET_FIELD_WRAPPER_ORIGINAL)):
+    for address, original in ((version.set_wrapper, SET_WRAPPER_ORIGINAL),
+                              (version.set_field_wrapper, SET_FIELD_WRAPPER_ORIGINAL)):
         if arm9[offset(address):offset(address) + len(original)] != original:
-            raise ValueError(f"unexpected code at {address:#010x}; is this the vanilla EU ROM?")
+            raise ValueError(f"unexpected code at {address:#010x}; is this a vanilla ROM?")
 
     list_start = offset(params["autoload_list_start"])
     itcm_destination, itcm_size, _ = struct.unpack_from("<III", arm9, list_start)
@@ -75,7 +100,8 @@ def patch_arm9(rom: NDSRom, blocked_flags: Iterable[int]) -> bytes:
 
     assert hooks.BITMAP_OFFSET + hooks.FLAG_COUNT // 8 <= ITCM_BLOCK_SIZE and hooks.BASE + ITCM_BLOCK_SIZE <= 0x02000000
     block = bytearray(ITCM_BLOCK_SIZE)
-    block[:len(hooks.CODE)] = hooks.CODE
+    code = hooks.CODE[rom.game_code]
+    block[:len(code)] = code
     bitmap = blocked_bitmap(blocked_flags)
     block[hooks.BITMAP_OFFSET:hooks.BITMAP_OFFSET + len(bitmap)] = bitmap
     insert_at = offset(params["autoload_start"]) + itcm_size
@@ -87,8 +113,8 @@ def patch_arm9(rom: NDSRom, blocked_flags: Iterable[int]) -> bytes:
     struct.pack_into("<II", arm9, params["offset"],
                      params["autoload_list_start"] + ITCM_BLOCK_SIZE, params["autoload_list_end"] + ITCM_BLOCK_SIZE)
 
-    arm9[offset(SET_WRAPPER):offset(SET_WRAPPER) + 8] = jump(hooks.HOOK_SET)
-    arm9[offset(SET_FIELD_WRAPPER):offset(SET_FIELD_WRAPPER) + 8] = jump(hooks.HOOK_SET_FIELD)
+    arm9[offset(version.set_wrapper):offset(version.set_wrapper) + 8] = jump(hooks.HOOK_SET)
+    arm9[offset(version.set_field_wrapper):offset(version.set_field_wrapper) + 8] = jump(hooks.HOOK_SET_FIELD)
     return bytes(arm9)
 
 
@@ -98,14 +124,13 @@ def patch_rom(vanilla: bytes, blocked_flags: Iterable[int], location_items: dict
     for locations that aren't in it say there is nothing to get. None leaves every reward text unchanged.
     """
     rom = NDSRom(vanilla)
-    if rom.game_code != GAME_CODE:
-        raise ValueError(f"expected the European ROM ({GAME_CODE}), got {rom.game_code}")
+    version = rom_version(rom)
     blocked = frozenset(blocked_flags) | ALWAYS_BLOCKED
     files: dict[int, bytes] = {}
     new_files: dict[str, bytes] = {}
     overlays: dict[int, bytes] = {}
     if location_items is not None:
-        replaced, new_files, overlays = reward_patches(rom, location_items, blocked)
+        replaced, new_files, overlays = reward_patches(rom, location_items, blocked, version.languages)
         files = {rom.files[path]: data for path, data in replaced.items()}
     return rom.build(arm9=patch_arm9(rom, blocked), files=files, new_files=new_files, overlays=overlays,
                      header_patches={AP_DATA_OFFSET: AP_MAGIC, SLOT_NAME_OFFSET: bytes(SLOT_NAME_SIZE)})

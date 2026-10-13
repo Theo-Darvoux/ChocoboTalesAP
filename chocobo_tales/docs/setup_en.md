@@ -11,7 +11,8 @@ This guide covers everything from installing the apworld to playing a multiworld
 - The Chocobo Tales apworld: `chocobo_tales.apworld` from the
   [latest release](https://github.com/Theo-Darvoux/ChocoboTalesAP/releases/latest)
 - A Final Fantasy Fables: Chocobo Tales ROM, **Europe** version (game code `AEHP`,
-  MD5 `a392490af90e31f2ce68d18b11833080`). You have to dump it yourself; it is not provided.
+  MD5 `a392490af90e31f2ce68d18b11833080`) or **USA** version (game code `AEHE`,
+  MD5 `06d12ca36fcd88c32c276affe792ae61`). You have to dump it yourself; it is not provided.
 
 ## Optional software
 
@@ -106,8 +107,8 @@ each other.
 - **"Chocobo Tales" isn't in the Launcher or the Options Creator**: the apworld isn't installed, or is installed
   twice. Look in `custom_worlds` (and `lib/worlds`) for old copies, keep a single `chocobo_tales.apworld`, then
   restart the Launcher.
-- **The ROM is rejected when opening the patch**: only the European ROM with the MD5 above is supported. Check
-  it isn't a trimmed, patched or other-region dump.
+- **The ROM is rejected when opening the patch**: only the European and USA ROMs with the MD5s above are
+  supported. Check it isn't a trimmed, patched or Japanese dump.
 - **The client doesn't see BizHawk**: make sure the connector Lua script is running in the Lua Console, and that
   only one BizHawk Client is open.
 - **The client disconnects after a while**: set BizHawk back to 100% speed and reload the connector script.

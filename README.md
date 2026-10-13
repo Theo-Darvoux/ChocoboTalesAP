@@ -1,12 +1,12 @@
 # Chocobo Tales for Archipelago
 
-An [Archipelago](https://archipelago.gg) world for **Final Fantasy Fables: Chocobo Tales** (Nintendo DS, Europe),
+An [Archipelago](https://archipelago.gg) world for **Final Fantasy Fables: Chocobo Tales** (Nintendo DS, Europe and USA),
 played on [BizHawk](https://tasvideos.org/BizHawk) with its melonDS core.
 
 Storybook goals, microgame medals, field cards, chocobo rescues, story chapters and card gifts become checks. The
 127 Pop-up Duel cards, the rescued chocobos, the storybook battle and trial modes (and optionally the epilogues)
 become items, shared with the other games of the multiworld. The patched game names the Archipelago item at every
-reward message, in all five languages.
+reward message, in all five languages of the European release (English in the USA one).
 
 > **Status: experimental.** Generation, patching and the reward texts are tested; some access rules (microgame
 > chapter timing, card gifts) are still conservative estimates. See [NOTES.md](NOTES.md).
@@ -28,7 +28,7 @@ Get the files from the [latest release](../../releases/latest):
    [BizHawk](https://tasvideos.org/BizHawk/ReleaseHistory) 2.10+.
 2. Double-click `chocobo_tales.apworld` (or **Install APWorld** in the Archipelago Launcher).
 3. Pick a preset YAML, set your `name:`, and generate the game with the other players' YAMLs.
-4. Open your `.apcts` patch with the Launcher's **Open Patch**; give it your Europe ROM (`AEHP`) when asked.
+4. Open your `.apcts` patch with the Launcher's **Open Patch**; give it your Europe (`AEHP`) or USA (`AEHE`) ROM when asked.
 5. Load `connector_bizhawk_generic.lua` in BizHawk if it isn't loaded for you, connect the BizHawk Client and play.
 
 Full tutorial: **[English](chocobo_tales/docs/setup_en.md)** · **[Français](chocobo_tales/docs/setup_fr.md)**.
@@ -38,7 +38,7 @@ Game page (checks, items, goals, logic): [en_Chocobo Tales.md](chocobo_tales/doc
 
 | | |
 |---|---|
-| Game | Europe only (`AEHP`, MD5 `a392490af90e31f2ce68d18b11833080`). No ROM is provided. |
+| Game | Europe (`AEHP`, MD5 `a392490af90e31f2ce68d18b11833080`) or USA (`AEHE`, MD5 `06d12ca36fcd88c32c276affe792ae61`). No ROM is provided. |
 | Archipelago | 0.6.7 or newer |
 | Emulator | BizHawk 2.10 or newer (melonDS core) |
 

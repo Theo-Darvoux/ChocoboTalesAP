@@ -72,4 +72,4 @@ included Compact and Epilogues YAML presets pair item bundles with suitable chec
 
 ## Supported versions
 
-Europe (`AEHP`) only for now.
+Europe (`AEHP`) and USA (`AEHE`). Japan isn't supported.

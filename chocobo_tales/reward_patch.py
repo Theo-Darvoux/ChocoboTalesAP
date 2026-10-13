@@ -77,7 +77,8 @@ def vanilla_goal_reward_blocked(book: int, goal_index: int, blocked: frozenset[i
     return False
 
 
-def patch_field_scripts(rom: NDSRom, font: Font, location_items: dict[int, str]) -> dict[str, bytes]:
+def patch_field_scripts(rom: NDSRom, font: Font, location_items: dict[int, str],
+                        languages: tuple[str, ...]) -> dict[str, bytes]:
     grants = {(script, card): field_grant_location(script, card, medal)
               for script, _, card, _, medal, _ in FIELD_CARD_GRANTS}
     files = {}
@@ -89,15 +90,15 @@ def patch_field_scripts(rom: NDSRom, font: Font, location_items: dict[int, str])
                 continue
             item = location_items.get(grants[(script_path, int(match.group(1)))])
             script.set_text(table, {language: found_message(font, language, item, FIELD_WIDTH)
-                                    for language in LANGUAGES})
+                                    for language in languages}, every_entry=languages == ("en",))
         files[script_path] = script.to_bytes()
     return files
 
 
 def patch_storybooks(rom: NDSRom, font: Font, location_items: dict[int, str],
-                     blocked: frozenset[int]) -> dict[str, bytes]:
+                     blocked: frozenset[int], languages: tuple[str, ...]) -> dict[str, bytes]:
     files = {}
-    for language in LANGUAGES:
+    for language in languages:
         for book in range(1, 17):
             path = f"/mgame/result/{language}/MG{book:03d}.dat.z"
             result = ResultData(rom.read(path))
@@ -136,19 +137,20 @@ def patch_result_overlay(rom: NDSRom) -> bytes:
     code = bytearray(rom.overlay_data(overlay))
     at = code.find(OVERLAY_CARD_BIN_PATH + b"\0")
     if at < 0 or code.count(OVERLAY_CARD_BIN_PATH) != 1:
-        raise ValueError("unexpected overlay 53; is this the vanilla EU ROM?")
+        raise ValueError("unexpected overlay 53; is this a vanilla ROM?")
     new_path = ap_card.CARD_BIN_PATH.encode("ascii")
     assert len(new_path) == len(OVERLAY_CARD_BIN_PATH)
     code[at:at + len(new_path)] = new_path
     return bytes(code)
 
 
-def reward_patches(rom: NDSRom, location_items: dict[int, str], blocked: Iterable[int]
+def reward_patches(rom: NDSRom, location_items: dict[int, str], blocked: Iterable[int],
+                   languages: tuple[str, ...] = LANGUAGES
                    ) -> tuple[dict[str, bytes], dict[str, bytes], dict[int, bytes]]:
-    """(replaced files by path, new files by path, replaced overlays by id)"""
+    """(replaced files by path, new files by path, replaced overlays by id). languages: the ROM's text languages."""
     blocked = frozenset(blocked)
     font = Font(rom.read("/text/font.nftr"))
-    replaced = {**patch_field_scripts(rom, font, location_items),
-                **patch_storybooks(rom, font, location_items, blocked)}
-    added = ap_card.new_files(rom)
+    replaced = {**patch_field_scripts(rom, font, location_items, languages),
+                **patch_storybooks(rom, font, location_items, blocked, languages)}
+    added = ap_card.new_files(rom, languages)
     return replaced, added, {OVERLAY_RESULT: patch_result_overlay(rom)}

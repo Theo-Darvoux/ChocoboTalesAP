@@ -311,20 +311,20 @@ CHOCOBO_FRIEND_IDS: dict[str, int] = {'Sweenie': 17, 'Peachie': 9, 'Indy': 12, '
 STORYBOOK_STORY_CHAPTER: dict[int, int] = {
     1: 1,
     2: 5,
-    3: 4,
+    3: 3,
     4: 4,
     5: 2,
     6: 3,
-    7: 3,
-    8: 3,
+    7: 2,
+    8: 2,
     9: 3,
-    10: 4,
+    10: 3,
     11: 4,
-    12: 5,
-    13: 5,
-    14: 6,
+    12: 4,
+    13: 4,
+    14: 5,
     15: 5,
-    16: 6,
+    16: 5,
 }
 
 # Every pop-up card a field script gives: (script, message text table, card number, event flag set just

@@ -28,6 +28,7 @@ class ChocoboTalesClient(BizHawkClient):
     def __init__(self) -> None:
         super().__init__()
         self.warned_unpatched = False
+        self.save_pointer = ram.SAVE_POINTERS[b"AEHP"]
 
     async def validate_rom(self, ctx: "BizHawkClientContext") -> bool:
         try:
@@ -46,6 +47,7 @@ class ChocoboTalesClient(BizHawkClient):
                 self.warned_unpatched = True
             return False
 
+        self.save_pointer = ram.SAVE_POINTERS[header[12:16]]
         ctx.game = self.game
         # Items found in this world are given by the client too, so every item comes from the server
         ctx.items_handling = 0b111
@@ -62,12 +64,12 @@ class ChocoboTalesClient(BizHawkClient):
         if ctx.server is None or ctx.server.socket.closed or ctx.slot_data is None:
             return
         try:
-            pointer_bytes = (await bizhawk.read(ctx.bizhawk_ctx, [(ram.SAVE_POINTER, 4, ram.MAIN_RAM)]))[0]
+            pointer_bytes = (await bizhawk.read(ctx.bizhawk_ctx, [(self.save_pointer, 4, ram.MAIN_RAM)]))[0]
             pointer = struct.unpack("<I", pointer_bytes)[0]
             if not ram.MAIN_RAM_BASE <= pointer < ram.MAIN_RAM_BASE + ram.MAIN_RAM_SIZE - ram.FLAG_BANK_SIZE:
                 return  # No save data set up yet (boot / title screen)
             bank = pointer - ram.MAIN_RAM_BASE + ram.FLAG_BANK_OFFSET
-            pointer_guard = (ram.SAVE_POINTER, pointer_bytes, ram.MAIN_RAM)
+            pointer_guard = (self.save_pointer, pointer_bytes, ram.MAIN_RAM)
 
             result = await bizhawk.guarded_read(ctx.bizhawk_ctx, [(bank, ram.FLAG_BANK_SIZE, ram.MAIN_RAM)],
                                                 [pointer_guard])

@@ -3,6 +3,20 @@
 Each release's section is used as its GitHub release notes. Versions follow `world_version` in
 `chocobo_tales/archipelago.json`.
 
+## 0.4.0
+
+- USA ROM (`AEHE`) support. The same `.apcts` patch works on either release; the USA game's messages are in
+  English.
+- Card gifts are now expected from the chapter their giver appears in, with the rescued chocobos and storybook
+  epilogues they need, instead of after the ending. Only Karma+ (Bebuzzu rematches) and its duel wins stay after
+  the ending.
+- Story order fixed: storybooks 3, 7, 8, 10, 12 and 13 open a chapter earlier, 14 and 16 in chapter 5. Each
+  chapter's Bebuzzu duel now needs the epilogue whose field change starts it, and the epilogues the story uses
+  are progression when shuffled.
+- Microgame access read from the game's scripts: Sweenie's and Wakaba's games only after the ending, the
+  Goblin's needs Moggy, and several need Belle, Indy or Jarro on the field.
+- Storybook Goals Required defaults to 90 (Compact preset: 26), so the goal still needs chapter 5.
+
 ## 0.3.0
 
 First public release. Europe ROM (`AEHP`) only, Archipelago 0.6.7 or newer.

@@ -14,8 +14,8 @@ Chocobo Tales:
   goal: story_complete
   chocobos_required: 12          # 1-15, for chocobo_rescue
   cards_required: 100            # 1-127, for card_collection; counts the cards inside packs
-  storybook_goals_required: 50   # 1-64 here (4 per book); above 40 it needs chapter 5
-  gold_medals_required: 19       # 1-23, for gold_medals; above 18 it needs chapter 5
+  storybook_goals_required: 50   # 1-64 here (4 per book); above 48 it needs chapter 5
+  gold_medals_required: 19       # 1-23, for gold_medals; above 16 it needs chapter 5
 
   # Duels after the tutorial need a 15-card deck. Logic expects this many more cards per later chapter.
   cards_per_chapter: 4           # 0-15
@@ -32,6 +32,6 @@ Chocobo Tales:
   microgame_medals: both         # 46 checks
   field_card_checks: true        # 9 checks
   chocobo_rescue_checks: true    # 15 checks
-  card_gift_checks: true         # 27 checks; logic only expects them after the ending
+  card_gift_checks: true         # 27 checks, from chapter 2 on (Karma+ after the ending)
   duel_s_rank_checks: false      # 8 boss duel win checks
   # The 5 chapter checks are always on.

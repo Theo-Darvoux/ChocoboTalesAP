@@ -1,8 +1,10 @@
 """
-Memory map for Final Fantasy Fables: Chocobo Tales (Europe, AEHP) in BizHawk's melonDS core, found by static
-analysis of the game's code (see NOTES.md). Offsets are into BizHawk's "Main RAM" domain (DS address - 0x02000000).
+Memory map for Final Fantasy Fables: Chocobo Tales (Europe AEHP, USA AEHE) in BizHawk's melonDS core, found by
+static analysis of the game's code (see NOTES.md). Offsets are into BizHawk's "Main RAM" domain (DS address -
+0x02000000).
 
-The game keeps its save data in one struct and reaches it through a global pointer (normally 0x020A35D8). The
+The game keeps its save data in one struct and reaches it through a global pointer (Europe: 0x0209DDE0, pointing to
+0x020A35D8; USA: 0x0209DBF8). The
 struct holds a flag bank of 32-bit words at +0x24; flags.py has what each flag means. Every check and every item
 is a flag.
 """
@@ -17,7 +19,7 @@ from .locations import (
     STORYBOOK_LOCATION_IDS, STORYBOOK_LOCATIONS,
 )
 from .rewards import CARD_GIFTS
-from .rom_patch import AP_DATA_OFFSET, AP_MAGIC, SLOT_NAME_OFFSET, SLOT_NAME_SIZE
+from .rom_patch import AP_DATA_OFFSET, AP_MAGIC, SLOT_NAME_OFFSET, SLOT_NAME_SIZE, VERSIONS
 
 MAIN_RAM = "Main RAM"
 ROM = "ROM"
@@ -27,12 +29,11 @@ MAIN_RAM_SIZE = 0x400000
 # The cartridge header is copied to 0x027FFE00 at boot: 12-byte title, then the 4-byte game code
 CART_HEADER = 0x3FFE00
 GAME_TITLE = b"CHOCOBOTALES"
-SUPPORTED_GAME_CODES: dict[bytes, str] = {
-    b"AEHP": "Europe",
-}
+SUPPORTED_GAME_CODES: dict[bytes, str] = {code.encode(): version.region for code, version in VERSIONS.items()}
 
-# Global holding the save struct's address (0x0209DDE0); set by the new game / load code
-SAVE_POINTER = 0x09DDE0
+# Game code -> global holding the save struct's address; set by the new game / load code
+SAVE_POINTERS: dict[bytes, int] = {code.encode(): version.save_pointer - MAIN_RAM_BASE
+                                   for code, version in VERSIONS.items()}
 FLAG_BANK_OFFSET = 0x24
 FLAG_BANK_SIZE = 0x150  # covers flags 0-0xA7F
 

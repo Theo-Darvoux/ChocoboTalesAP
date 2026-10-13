@@ -12,22 +12,30 @@ from .items import (
 )
 from .locations import location_name_groups, location_name_to_id
 from .options import GAME_OPTION_NAMES, ChocoboTalesOptions
-from .regions import can_goal, card_gift_hosts, create_regions
-from .rewards import CARD_GIFTS
+from .access import CARD_GIFT_ACCESS, FIELD_CARD_EPILOGUES, MICROGAME_ACCESS, STORY_EPILOGUES
+from .items import epilogue_item_name
+from .regions import can_goal, create_regions
 from .rom import ChocoboTalesProcedurePatch, write_patch
-from .rom_patch import VANILLA_MD5
+from .rom_patch import VANILLA_MD5S
 
-# Rescued chocobos that host microgames, and those that give card gifts
-HOST_CHOCOBOS = frozenset({"Chocobo Dolly", "Chocobo Sweenie", "Chocobo Wakaba", "Chocobo Zavi"})
-GIFT_CHOCOBOS = frozenset(f"Chocobo {host}" for card in CARD_GIFTS for host in card_gift_hosts(card))
+# Rescued chocobos that microgames need, and those that card gifts need
+HOST_CHOCOBOS = frozenset(f"Chocobo {name}" for access in MICROGAME_ACCESS.values() for name in access.chocobos)
+GIFT_CHOCOBOS = frozenset(f"Chocobo {name}" for access in CARD_GIFT_ACCESS.values()
+                          for name in (*access.chocobos, *access.owned))
+# Epilogues that logic needs when they're shuffled: the story's, the microgames' and field cards', and the card gifts'
+LOGIC_EPILOGUES = frozenset(epilogue_item_name(*epilogue) for epilogue in (
+    *(e for epilogues in STORY_EPILOGUES.values() for e in epilogues),
+    *(e for access in MICROGAME_ACCESS.values() for e in access.epilogues),
+    *(e for epilogues in FIELD_CARD_EPILOGUES.values() for e in epilogues)))
+GIFT_EPILOGUES = frozenset(epilogue_item_name(*e) for access in CARD_GIFT_ACCESS.values() for e in access.epilogues)
 
 
 class ChocoboTalesSettings(settings.Group):
     class RomFile(settings.UserFilePath):
-        """File name of the Final Fantasy Fables: Chocobo Tales ROM (Europe)"""
-        description = "Chocobo Tales (Europe) ROM File"
-        copy_to = "FFF_ChocoboTales_Europe.nds"
-        md5s = [VANILLA_MD5]
+        """File name of the Final Fantasy Fables: Chocobo Tales ROM (Europe or USA)"""
+        description = "Chocobo Tales (Europe or USA) ROM File"
+        copy_to = "FFF_ChocoboTales_Europe.nds"  # kept for existing host.yaml files, whatever the release
+        md5s = VANILLA_MD5S
 
     rom_file: RomFile = RomFile(RomFile.copy_to)
 
@@ -135,6 +143,8 @@ class ChocoboTalesWorld(World):
         if name in MODE_ITEMS or name == STORY_COMPLETE_EVENT:
             return ItemClassification.progression
         if name in EPILOGUE_ITEMS:
+            if name in LOGIC_EPILOGUES or (name in GIFT_EPILOGUES and self.options.card_gift_checks):
+                return ItemClassification.progression
             return ItemClassification.useful
         if name in CHOCOBO_ITEMS:
             if (name in HOST_CHOCOBOS or (name in GIFT_CHOCOBOS and self.options.card_gift_checks)

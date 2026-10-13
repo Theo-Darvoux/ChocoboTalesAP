@@ -3,16 +3,16 @@ from typing import TYPE_CHECKING
 from BaseClasses import CollectionState, ItemClassification, Region
 
 from . import flags
-from .data import CHOCOBO_FRIEND_IDS, STORYBOOK_STORY_CHAPTER
+from .access import (CARD_GIFT_ACCESS, FIELD_CARD_EPILOGUES, MICROGAME_ACCESS, POST_GAME, STORY_EPILOGUES, Access)
+from .data import STORYBOOK_REWARD_RECORDS, STORYBOOK_STORY_CHAPTER
 from .items import (BOOK_MODE_ITEM, CARD_ITEMS, CARD_PACK_ITEMS, CARD_PACK_NUMBERS, MODE_UNLOCKS,
-                    STORY_COMPLETE_EVENT, ChocoboTalesItem)
+                    STORY_COMPLETE_EVENT, ChocoboTalesItem, epilogue_item_name)
 from .locations import (
     CARD_GIFT_LOCATION_IDS, CARD_GIFT_LOCATIONS, CHAPTER_LOCATION_IDS, CHAPTER_LOCATIONS, DUEL_LOCATION_IDS,
     DUEL_LOCATIONS, FIELD_CARD_LOCATION_IDS, FIELD_CARD_LOCATIONS, MICROGAME_LOCATION_IDS, MICROGAME_LOCATIONS,
     RESCUE_LOCATION_IDS, RESCUE_LOCATIONS, STORYBOOK_LOCATION_IDS, STORYBOOK_LOCATIONS, ChocoboTalesLocation,
     StorybookGoal,
 )
-from .rewards import CARD_GIFTS
 
 if TYPE_CHECKING:
     from . import ChocoboTalesWorld
@@ -20,60 +20,22 @@ if TYPE_CHECKING:
 CHAPTERS = 6
 # Every duel after the tutorial (whose 3-card deck the game builds itself) needs a 15-card deck of owned cards
 DECK_SIZE = 15
-POST_GAME = 7  # region after the ending
 
-# Microgame -> (chapter it's played from, rescued chocobo hosting it). Each microgame's map tile comes from the
-# field map markers and its launch script (see NOTES.md); the chapter is the earliest chapter whose storybooks are
-# in that part of the map, rounded later when unsure. Four microgames are run by rescued chocobos (dolly.act,
-# swinny.act, wakaba.act, zavi.act), so logic also expects that chocobo. Microgame 23 only opens after the ending.
-MICROGAME_ACCESS: dict[int, tuple[int, str | None]] = {
-    1: (2, None),    # 47/52, next to storybook 5
-    2: (2, None),    # 52/49, farm area
-    3: (3, None),    # 50/53, south
-    4: (3, None),    # 46/52, north-west
-    5: (6, None),    # 45/45, west
-    6: (2, None),    # farm house
-    7: (2, None),    # barn
-    8: (2, "Dolly"),  # farm house
-    9: (2, None),    # farm house
-    10: (2, None),   # 51/50, farm area
-    11: (2, "Sweenie"),
-    12: (5, None),   # 48/45, west
-    13: (3, None),   # 50/54, south
-    14: (2, None),   # barn
-    15: (2, "Wakaba"),
-    16: (5, None),   # 56/50, east
-    17: (4, None),   # 55/50, east
-    18: (5, None),   # 49/45, west
-    19: (2, "Zavi"),
-    20: (2, None),   # 47/52, next to storybook 5
-    21: (4, None),   # 55/52, east
-    22: (3, None),   # house room south of the farm
-    23: (POST_GAME, None),  # in the ending script
-}
-
-# The field map layout puts eight pickups in the farm area. The 150/49 interior is
-# left in chapter 6 until its earlier access has been confirmed in game.
+# The 9 field card pickups' map tiles -> chapter, from the field map layout. The 150/49 interior is left in chapter 6
+# until its earlier access has been confirmed in game.
 FIELD_CARD_ACCESS: dict[tuple[int, int], int] = {
     (50, 50): 1,
     (48, 51): 2, (52, 51): 2, (49, 51): 2, (46, 52): 2,
     (50, 49): 2, (50, 52): 2, (51, 50): 2,
     (150, 49): 6,
 }
-
-
-# Card gifts handed out by rescued chocobos, by the script giving them (the chocobo is only there once rescued)
-CARD_GIFT_SCRIPT_HOSTS: dict[str, str] = {"glynn.act": "Grinn", "bekky.act": "Becky", "momo.act": "Peachie",
-                                          "blues.act": "Bruce"}
-
-
-def card_gift_hosts(card: int) -> set[str]:
-    """Rescued chocobos a card gift needs: its giver, and any chocobo its message's condition tests."""
-    _, scripts, condition = CARD_GIFTS[card]
-    hosts = {CARD_GIFT_SCRIPT_HOSTS[name] for name in (script.rsplit("/", 1)[1] for script in scripts)
-             if name in CARD_GIFT_SCRIPT_HOSTS}
-    hosts |= {name for name, friend_id in CHOCOBO_FRIEND_IDS.items() if flags.chocobo_flag(friend_id) in condition}
-    return hosts
+# Bebuzzu rematches (whose wins set these duel flags) are only offered after the ending (their text1.act tests 0x3DF)
+POST_GAME_DUELS = frozenset(name for name in flags.DUEL_WIN_FLAGS if name.startswith("Bebuzzu"))
+# (book, epilogue) -> the storybook goal that unlocks it in the vanilla game
+EPILOGUE_GOALS: dict[tuple[int, int], StorybookGoal] = {
+    (goal.book, value): goal for name, goal in STORYBOOK_LOCATIONS.items()
+    for kind, value in STORYBOOK_REWARD_RECORDS[goal.book - 1][goal.goal_index] if kind == "epilogue"
+}
 
 
 def chapter_region_name(chapter: int) -> str:
@@ -93,6 +55,29 @@ def card_count(world: "ChocoboTalesWorld", state: CollectionState) -> int:
         return sum(len(CARD_PACK_NUMBERS[item_id]) for name, item_id in CARD_PACK_ITEMS.items()
                    if state.has(name, world.player))
     return sum(state.has(name, world.player) for name in CARD_ITEMS)
+
+
+def has_epilogue(world: "ChocoboTalesWorld", state: CollectionState, book: int, epilogue: int) -> bool:
+    """
+    Whether the epilogue can be unlocked: its Archipelago item, or else the vanilla goal awarding it (with that book's
+    Modes item when the goal needs one). Callers place the location no earlier than the book's chapter.
+    """
+    if world.options.shuffle_epilogues:
+        return state.has(epilogue_item_name(book, epilogue), world.player)
+    goal = EPILOGUE_GOALS[(book, epilogue)]
+    return (not needs_mode_item(goal) or bool(world.options.open_storybook_modes)
+            or state.has(BOOK_MODE_ITEM[goal.book], world.player))
+
+
+def access_rule(world: "ChocoboTalesWorld", access: Access):
+    """The rule for an Access entry's chocobos and epilogues (its chapter is the location's region), or None."""
+    chocobos = [f"Chocobo {name}" for name in (*access.chocobos, *access.owned)]
+    epilogues = access.epilogues
+    if not chocobos and not epilogues:
+        return None
+    player = world.player
+    return lambda state: (state.has_all(chocobos, player)
+                          and all(has_epilogue(world, state, book, e) for book, e in epilogues))
 
 
 def selected_storybook_names(world: "ChocoboTalesWorld") -> list[str]:
@@ -150,42 +135,39 @@ def create_regions(world: "ChocoboTalesWorld") -> None:
                 location.access_rule = lambda state, item=BOOK_MODE_ITEM[goal.book]: state.has(item, player)
             region.locations.append(location)
 
-    for name in selected_microgame_names(world):
-        medal = MICROGAME_LOCATIONS[name]
-        chapter, host = MICROGAME_ACCESS[medal.game]
-        region = regions[chapter]
-        location = ChocoboTalesLocation(player, name, MICROGAME_LOCATION_IDS[name], region)
-        if host:
-            location.access_rule = lambda state, item=f"Chocobo {host}": state.has(item, player)
+    def add(name: str, location_id: int, access: Access) -> None:
+        region = regions[access.chapter]
+        location = ChocoboTalesLocation(player, name, location_id, region)
+        rule = access_rule(world, access)
+        if rule:
+            location.access_rule = rule
         region.locations.append(location)
+
+    for name in selected_microgame_names(world):
+        add(name, MICROGAME_LOCATION_IDS[name], MICROGAME_ACCESS[MICROGAME_LOCATIONS[name].game])
 
     if options.field_card_checks:
         for name, (_, _, map_tile) in FIELD_CARD_LOCATIONS.items():
-            region = regions[FIELD_CARD_ACCESS[map_tile]]
-            region.locations.append(ChocoboTalesLocation(player, name, FIELD_CARD_LOCATION_IDS[name], region))
+            add(name, FIELD_CARD_LOCATION_IDS[name],
+                Access(FIELD_CARD_ACCESS[map_tile], epilogues=FIELD_CARD_EPILOGUES.get(map_tile, ())))
 
     if options.card_gift_checks:
-        # Gifts are unavailable during the last chapter (flag 0x7F, set after the chapter 5 Bebuzzu duel, until the
-        # ending), and when each first becomes available isn't established yet, so logic waits for the ending.
-        region = regions[POST_GAME]
         for name, card in CARD_GIFT_LOCATIONS.items():
-            location = ChocoboTalesLocation(player, name, CARD_GIFT_LOCATION_IDS[name], region)
-            hosts = sorted(card_gift_hosts(card))
-            if hosts:
-                location.access_rule = lambda state, items=[f"Chocobo {host}" for host in hosts]: \
-                    state.has_all(items, player)
-            region.locations.append(location)
+            add(name, CARD_GIFT_LOCATION_IDS[name], CARD_GIFT_ACCESS[card])
 
     for name, chapter in CHAPTER_LOCATIONS.items():
         region = regions[chapter]
         location = ChocoboTalesLocation(player, name, CHAPTER_LOCATION_IDS[name], region)
-        location.access_rule = (lambda state, n=DECK_SIZE + (chapter - 1) * cards_per_chapter:
-                                card_count(world, state) >= n)
+        # The boss duel needs a bigger deck each chapter, and the field changes the chapter's storybook epilogues make
+        location.access_rule = (lambda state, n=DECK_SIZE + (chapter - 1) * cards_per_chapter,
+                                epilogues=STORY_EPILOGUES[chapter]:
+                                card_count(world, state) >= n
+                                and all(has_epilogue(world, state, book, e) for book, e in epilogues))
         region.locations.append(location)
 
     if options.duel_s_rank_checks:
-        region = regions[CHAPTERS]
-        for name in DUEL_LOCATIONS:
+        for name, opponent in DUEL_LOCATIONS.items():
+            region = regions[POST_GAME if opponent in POST_GAME_DUELS else CHAPTERS]
             region.locations.append(ChocoboTalesLocation(player, name, DUEL_LOCATION_IDS[name], region))
 
     # The ending: beat the last Bebuzzu duel at the end of chapter 6

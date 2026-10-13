@@ -74,6 +74,26 @@ Everything was found by static analysis (`NDSTools`), then checked in game.
   The boss tiles' `DuelResultS.act` set `0x13E`-`0x145` on a win; `DuelResult.act` only warps back.
   Optional location names now say "Pop-up Duel Win"; the YAML key `duel_s_rank_checks` stays for compatibility.
 
+## USA release (AEHE)
+
+`~/Applications/ROMs/NDS/chocobotalesusa.zip` (MD5 of the NDS: `06d12ca36fcd88c32c276affe792ae61`). Same game
+data: `tools/extract_rom_data.py` gives the same `data.py` but for 43 field grants' message table offsets, which
+nothing reads. Differences the patch handles (`rom_patch.VERSIONS`):
+- ARM9: the set / set-field wrappers are at `0x02001B6C` / `0x02001BD0` (EU minus `0x7C`, same bytes), calling
+  `0x020040A4` / `0x020041A0`; they load the save pointer global `0x0209DBF8` (literal `0x0209DBF4`). `ndstools
+  calls` finds no other caller of the low-level functions, as in EU. Same ITCM autoload block (`0x01FF8000`,
+  `0x6D00`), so the hooks only differ in their literal pool (`hooks.CODE` per game code).
+- English only: one `/mgame/result/en`, `/mgentryphase/text/en`, `/card/en` folder. `.act` text tables keep seven
+  entries (0, 4, 6 Japanese, 2, 3, 5 French/German/Spanish leftovers); the patch points all seven at the English
+  text. The only English monster name with an "A" is the condensed "Adamantoise", so `ap_card.harvest_letters`
+  takes a missing letter from the first piece of such a name.
+- Overlays 2/19/53 load at `0x020CAD80` (EU minus `0x1E0`); overlay 53 has the same `card\&\card.bin.z` path.
+The patched EU ROM is byte-identical to the one built before this port. The same `.apcts` applies to either ROM
+(`build_ap_rom` picks the version from the game code; Archipelago only records the manifest's checksum), and the
+client picks the save pointer from the cartridge header. Tested: both ROMs through `test_rom_patch` (hooks run in
+unicorn) and `test_reward_patch`, a generated `.apcts` applied by Archipelago 0.6.7's `Patch.py` to the US ROM, and
+the client's version detection. Not yet run in BizHawk.
+
 ## Field event scripts (.act)
 
 A u32 string-area offset, then commands: u16 opcode, u16 length, 8-byte arguments (u16 type, u32 value).
@@ -84,8 +104,15 @@ Known opcodes: 0x00 assign (dest, src), 0x05 message, 0x0A start scene (mode, id
 Scene modes: 0 storybook (id = book − 1), 1 microgame (id − 0x10 = microgame number, ids 0x11-0x27),
 2 Pop-up Duel, 3 chapter / story scenes (ids 2-6 are the chapter 2-6 title cards, 13 the ending).
 
-Story order comes from the developer skip scripts `/field/50/50/skipN[pb].act` (state at the start of chapter
-N / before its boss duel). `tools/extract_rom_data.py` reads which storybooks they unlock. Microgame locations
+Story order comes from the developer skip scripts `/field/50/50/skipN[pb].act`. skipN is the state right after
+chapter N − 1's Bebuzzu duel (it has that boss scene's story flags, e.g. `0x34`/`0x3F` from `45/51/a3.act` in
+skip3), so its storybooks belong to chapter N − 1; skipNpb is a point inside chapter N. Their chapter flags are not a
+reliable marker (skip3/skip4 lack the one the boss scene sets, skip5 has it). Each chapter 2-5 boss is started by
+epilogue 1 of the boss tile's storybook: Gimmick4B1 (book 8), 5B1 (book 10), 6B1 (book 12) and 8B1 (book 16) warp
+into the scene (`45/51/a2`, `48/55/a1`, `56/51/a3`, `44/45/a1`) that sets the guard of the tile's `bebuz.act`.
+These are `access.BOSS_EPILOGUES`, required by each "Chapter N Complete". Books 14 and 16 are in no skip script:
+book 14's object at 47/45 needs Gimmick8A1's `0x60` (in skip5pb), book 16 starts chapter 5's boss, so both are
+chapter 5. `tools/extract_rom_data.py` reads which storybooks the skip scripts unlock. Microgame locations
 come from the field map marker table in overlay 2 (`0x020D684C`: 16 storybooks, 14 duels, 23 microgames with
 their map tiles) and from their launch scripts.
 
@@ -124,10 +151,19 @@ the vanilla texts.
   locations. Everything else is a **card gift** (27 cards: Carbuncles, Peachie, Becky, Grinn, Bruce, Chubby,
   Jailbird, the Mist Dragon in the hole at 48/51, Dueler X's Goblins and Moogle card, the Typhon chests, the beaten
   duelists, and Gungnir+ / Karma+ for beating all four Pop-up Duel bosses / Bebuzzu duels). Each gift script sets
-  an event flag (0x81-0xFA) right before the card flag; that flag is the check. The gifts' conditions include
-  `0x7F` (set by 44/45/a2.act after the chapter 5 Bebuzzu duel) and `0x3DF` (ending): they look unavailable during
-  the last chapter, so logic puts them in Post Game. Rescued chocobos giving gifts (and Dolly, which mogu2.act's
-  condition tests) are required items, and are progression when `card_gift_checks` is on.
+  an event flag (0x81-0xFA) right before the card flag; that flag is the check. The ending flag `0x3DF` selects
+  dialogue or music in several gift scripts; it does not guard their card grants.
+  `access.py` now places 26 gifts in chapters 2-6 with their rescued-chocobo and field-gimmick requirements. The
+  first-duelist cards belong in chapters 2/3/4/5; the skip3/4/5 snapshots contain their story flags `0x28`/`0x4E`/
+  `0x6C`, and Iron Giant is fought in chapter 5 (touching book 14 runs `47/45/a1.act`, which sets its guard `0x7B`). `DuelResultS.act` sets their four win flags and awards Gungnir+
+  once all are set, so that gift is in chapter 5 too. Dueler X's Goblin cards are part of chapter 2's forced event.
+  Dark Blade checks ownership flags for all chocobos 3-20: 15 are Archipelago items, while Gelp, Bluebay and Rose
+  are fixed story rescues. Rose's map tests story flag `0x72`, present by the chapter 5 skip snapshot, so the gift
+  is placed in chapter 5. Carbuncle 77 (149/49) needs `0x34`, set by the chapter 2 boss scene `45/51/a3.act`, so it is chapter 3.
+  Carbuncle 78 appears on Technolith 5F when `0x7F` is set after the chapter 5 Bebuzzu
+  duel; Carbuncle 76 appears in the barn when the other five Carbuncle flags `0xC9`-`0xCD` are set. Neither map
+  creation guard tests the ending flag, and the corresponding flags stay set across chapters. Both belong to
+  chapter 6. Only Karma+ remains in Post Game: its Bebuzzu rematches are offered after the ending.
 - **Chocobo rescue scenes** (`cNN.act`, "You rescued X from the chocobo card!") are left as they are: each book's
   `bookret.act` only plays them once the chocobo's ownership flag is set, which only the Archipelago item does.
 - **Storybook result screens**: `/mgame/result/<lang>/MGNNN.dat` is 7 x (u32 goal text, u32 record count,
@@ -136,6 +172,7 @@ the vanilla texts.
   record per location the goal checks (goal, then chocobo rescue) shows the Archipelago card with "Item found:" +
   item. Unblocked records (book 1 battle levels, unshuffled epilogues) stay. Type 3 sets flag 0x400 + the card's
   number, found by image id in overlay 53's own copy of card.bin (linear search, `0x020D5488`).
+
 - **Goal lists**: `/mgentryphase/text/<lang>/secret/clNNN.ptx` (`\x1bC` card icon, `\x1bG ... \x1b\x1b` color).
 - **The Archipelago card** (image id 2700, number 0; `ALWAYS_BLOCKED` adds flag 0x400): the result screen draws
   the whole card face from `/card/card_<id>.pbg.z` (D2KP: NCLR + 8 bpp NCGR, laid out by `/card/card.NSCR.z`),
@@ -151,6 +188,28 @@ the vanilla texts.
 - ROM size: the base patch already stores the ARM9 binary uncompressed (67.26 MB, a 128 MB cartridge in the
   header); the reward patch adds about 160 KB.
 
+The resolved microgame chapters in `access.py` (after raising each host to its rescue book's chapter and each
+required gimmick to its storybook's chapter) are:
+
+| Chapter | Microgames |
+| --- | --- |
+| 2 | 1, 2, 6, 7, 8, 14, 20 |
+| 3 | 3, 4, 10, 13, 22 |
+| 4 | 9, 17, 19, 21 |
+| 5 | 12, 16, 18 |
+| 6 | 5 |
+| Finale (represented by Post Game) | 23 |
+| After ending | 11, 15 |
+
+The host/gimmick conditions are read from the launch scripts and `map.act` object guards. Game 3's Goblin wants
+the gold needle (`0x11E`), which only `51/51/moggy.act` gives, and that object needs Moggy's presence (`0x10E`). The bare map-area
+chapters are still estimates where the 3D terrain could hide an earlier or later route. The `49/51/game1.act`
+and `50/51/game1.act` copies of games 12 and 14 have no object in their maps, so they do not change the table.
+Game 23 launches in `50/51/ending1.act` during the chapter 6 finale, before `49/49/ending2.act` sets `0x3DF`;
+the Post Game region represents its dependency on reaching the final duel, not its literal scene order.
+After the story-order fix, Archipelago 0.6.7 generates each preset (seeds 1-5), the three combined, and the
+Epilogues preset with card gifts on (seeds 11-15).
+
 ### Testing reward texts
 
 BizHawk refuses a savestate made with another ROM ("MemoryBlock hash mismatch"). To show patched data in the
@@ -163,8 +222,10 @@ stands in for image id 2600 there.
 Verified in game this way (French): the field card at 150/49 (vanilla state before picking it up) shows "Objet
 trouvé : <item>"; finishing book 1's race under 30 s shows the Archipelago card (logo, name, description) and
 "Objet trouvé : <item>". The full patched ROM boots to the chapter 1 field (`research/states/full_ap_chapter1.State`).
-Not yet seen in game: the goal list, a microgame medal or gift message, a chocobo or epilogue result, and overlay 53
-loading `apcd.bin.z` itself (structurally tested; the same folders' files load fine).
+Not yet seen in game on the full patched ROM: the goal list, a microgame medal or gift message, a chocobo or
+epilogue result, and overlay 53 loading `apcd.bin.z` itself (structurally tested; the same folders' files load
+fine). A vanilla SaveRAM loads with the full patched ROM, but its last persisted point precedes these results;
+the near-result vanilla savestate cannot be loaded under a different ROM hash.
 
 ## Options and generation
 
@@ -206,24 +267,30 @@ resulting ROM's field, microgame, gift and result texts match the spoiler.
 Preset balance (2026-10-13, Archipelago 0.6.7, five solo seeds per preset and goal, all generated): the
 presets use fixed values (the client never tells players which goal a weighted YAML rolled).
 `chocobo_tales.yaml` (the defaults): 214 checks, 72 filler (33%), 6-8 spheres. `chocobo_tales_compact.yaml`:
-84 checks, 31-34 filler (36-40%); card gifts are off there, since with them 27 of 111 checks were post-ending and
+84 checks, 31-34 filler (36-40%); card gifts are off there, since with the old logic 27 of 111 checks were post-ending and
 filler reached 52-54%. `chocobo_tales_epilogues.yaml`: 166 checks, 65-68 filler (39-40%).
-Storybook Goals and Gold Medals defaults were raised (50 -> 75, 15 -> 19) so those goals need chapter 5, like
-most of the story: with 7 goals per book, chapters 1-4 hold 70 storybook checks, and 18 microgames (with their
-chocobo hosts). With every Modes item and chocobo given, logic now needs 27 cards (30 with Card Packs) for either
-goal in all three presets; it was 23 (chapter 4) before. Compact (24 of 32) and Epilogues (50 of 64) already
-required chapter 5. Solo spheres are too coarse to show this: nearly everything opens within two spheres.
+Storybook Goals and Gold Medals defaults are set so those goals need chapter 5, like most of the story. Since the
+story-order fix (books 3, 7, 8, 10, 12, 13 a chapter earlier, 14 and 16 in chapter 5), chapters 1-4 hold 12 books
+and 16 microgames (with their chocobo hosts). Storybook Goals Required is 90 (> 84 = 12 x 7; was 75 for the old
+70), Compact asks 26 (> 24 = 12 x 2; was 24), Epilogues keeps 50 (> 48 = 12 x 4), and 19 Gold Medals stays above
+16. `test_access` checks the presets against these counts. Solo spheres are too coarse to show this: nearly
+everything opens within two spheres.
 
 ## Still to do
 
-- Card gifts: find when each becomes available (and whether any is missable) to move them out of Post Game.
+- Card gifts: check the chapter 6/post-ending ship route to Technolith 5F and return route to the barn in game.
+  The card and giver flags are monotonic in ordinary field scripts, but the static map does not prove every route.
 - See the remaining reward displays in game with the real patched ROM (needs states made on it).
 
-- Microgame chapter placement (`MICROGAME_ACCESS` in `regions.py`) remains a conservative estimate from map
+- Microgame chapter placement (`MICROGAME_ACCESS` in `access.py`) remains a conservative estimate from map
   tiles and nearby storybooks. Each tile has one static `fieldXY.pak.z` 3D model (`KAPH` containing `BMD0`),
   so no per-chapter model variants were found. Field object creation and launch scripts contain opcode `0x05`
   conditions evaluated by overlay 2 at `0x020D3610` via the expression interpreter at `0x020D3014`.
   The condition offsets resolve through runtime field state; their mapping to chapter flags / obstacles is
   still unknown. Overlay 2's direct flag reads at `0x020CFCE0` and `0x020D00B8` belong to the top-screen
   marker table, not confirmed 3D access gates. A live chapter-by-chapter field comparison is still needed.
-- US (`AEHE`) and JP versions: needs those ROMs. The same tools should give their addresses quickly.
+  The duplicate launch scripts for microgames 12 (`49/51/game1.act`) and 14 (`50/51/game1.act`) have no object
+  creation in those tiles' `map.act`; they do not provide an earlier route than the spawned launch scripts.
+  Also check how microgame 23 can be replayed after the finale: `150/51/bookret.act` enters `ending1.act` when
+  `0x9D8` is set, while `ending2.act` clears `0x9D8` before setting the ending flag.
+- USA (`AEHE`): supported statically (see "USA release"); not yet played with the patch. JP still needs a ROM.

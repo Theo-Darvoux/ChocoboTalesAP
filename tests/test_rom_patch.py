@@ -1,19 +1,17 @@
 """
 Tests the ROM patch: rebuilds the ROM, then runs the patched game code (wrappers -> hooks -> the game's own flag
 functions) in the unicorn ARM emulator to check which flag writes go through.
-Needs the vanilla ROM (CHOCOBO_TALES_ROM, default ~/Applications/ROMs/NDS/FFF_ChocoboTales_Europe.nds) and
-unicorn, so run it with ../../NDSTools/.venv/bin/python -m unittest test_rom_patch
+Runs on each vanilla ROM found (load_world.ROM_PATHS: CHOCOBO_TALES_ROM for Europe, CHOCOBO_TALES_US_ROM for the
+USA, an .nds or a .zip) and needs unicorn, so run it with ../../NDSTools/.venv/bin/python -m unittest test_rom_patch
 """
 import hashlib
-import os
 import struct
 import unittest
 from pathlib import Path
 
-from load_world import load
+from load_world import load, read_rom
 
 world = load()
-ROM_PATH = Path(os.environ.get("CHOCOBO_TALES_ROM", Path.home() / "Applications/ROMs/NDS/FFF_ChocoboTales_Europe.nds"))
 
 try:
     import unicorn
@@ -25,11 +23,15 @@ BANK = 0x02300000  # fake save struct
 RETURN = 0x00010000  # address the emulated call returns to
 
 
-@unittest.skipUnless(ROM_PATH.exists(), "vanilla ROM not found")
-class TestRomPatch(unittest.TestCase):
+class RomPatchTests:
+    GAME_CODE: str
+
     @classmethod
     def setUpClass(cls):
-        cls.vanilla = ROM_PATH.read_bytes()
+        cls.vanilla = read_rom(cls.GAME_CODE)
+        if cls.vanilla is None:
+            raise unittest.SkipTest(f"vanilla {cls.GAME_CODE} ROM not found")
+        cls.version = world.rom_patch.VERSIONS[cls.GAME_CODE]
         cls.patched = world.rom_patch.patch_rom(cls.vanilla, world.ram.BLOCKED_FLAGS)
         cls.rom = world.nds.NDSRom(cls.patched)
 
@@ -46,7 +48,8 @@ class TestRomPatch(unittest.TestCase):
             self.assertEqual(vendored.read_text(), ndstools.read_text(), "copy NDSTools/ndstools/nftr.py to font.py")
 
     def test_vanilla_rom_is_the_expected_one(self):
-        self.assertEqual(hashlib.md5(self.vanilla).hexdigest(), world.rom_patch.VANILLA_MD5)
+        self.assertEqual(hashlib.md5(self.vanilla).hexdigest(), self.version.md5)
+        self.assertEqual(world.nds.NDSRom(self.vanilla).game_code, self.GAME_CODE)
 
     def test_structure(self):
         rom, vanilla = self.rom, world.nds.NDSRom(self.vanilla)
@@ -90,7 +93,7 @@ class TestRomPatch(unittest.TestCase):
         emu.mem_write(0x02000000, arm9[:params["autoload_start"] - 0x02000000])
         start = params["autoload_start"] - 0x02000000
         emu.mem_write(0x01FF8000, arm9[start:start + 0x6D00 + world.rom_patch.ITCM_BLOCK_SIZE])
-        emu.mem_write(0x0209DDE0, struct.pack("<I", BANK))  # the save struct pointer
+        emu.mem_write(self.version.save_pointer, struct.pack("<I", BANK))  # the save struct pointer
 
         def call(address: int, *args: int) -> None:
             for register, value in zip((arm_const.UC_ARM_REG_R0, arm_const.UC_ARM_REG_R1,
@@ -112,7 +115,7 @@ class TestRomPatch(unittest.TestCase):
         allowed = [0x21, 0x43, 0x3DF, 0x7EE, 0x9F9, 0x480, 0x3E6, 0x7D8, 0x7DD, 0xA7F]
         self.assertFalse(set(allowed) & all_blocked)
         for flag in blocked + allowed:
-            for wrapper, args in ((0x02001BE8, (flag,)), (0x02001C4C, (flag, 1, 1))):
+            for wrapper, args in ((self.version.set_wrapper, (flag,)), (self.version.set_field_wrapper, (flag, 1, 1))):
                 clear_bank()
                 call(wrapper, *args)
                 self.assertEqual(is_set(flag), flag not in all_blocked, f"{wrapper:#x} flag {flag:#x}")
@@ -121,12 +124,20 @@ class TestRomPatch(unittest.TestCase):
                 self.assertEqual(set_count, 0 if flag in all_blocked else 1)
         # Multi-bit fields and clearing always go through
         clear_bank()
-        call(0x02001C4C, 0x3FB, 2, 3)
+        call(self.version.set_field_wrapper, 0x3FB, 2, 3)
         self.assertTrue(is_set(0x3FB) and is_set(0x3FC))
         emu.mem_write(BANK + 0x24, b"\xff" * 0x150)
         card = blocked[0]
-        call(0x02001C4C, card, 1, 0)
+        call(self.version.set_field_wrapper, card, 1, 0)
         self.assertFalse(is_set(card))
+
+
+class TestRomPatchEurope(RomPatchTests, unittest.TestCase):
+    GAME_CODE = "AEHP"
+
+
+class TestRomPatchUSA(RomPatchTests, unittest.TestCase):
+    GAME_CODE = "AEHE"
 
 
 if __name__ == "__main__":

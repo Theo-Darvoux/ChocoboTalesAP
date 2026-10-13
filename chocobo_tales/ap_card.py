@@ -242,15 +242,19 @@ def _segments(rows: list[list[int]], line: tuple[int, int], threshold: int) -> l
     return segments
 
 
-def harvest_letters(rom: NDSRom) -> dict[tuple[int, str], list[list[list[int]]]]:
+def harvest_letters(rom: NDSRom, languages: tuple[str, ...] = LANGUAGES
+                    ) -> dict[tuple[int, str], list[list[list[int]]]]:
     """
     (line, letter) -> letter images (columns of brightness 0-255) cut out of the game's pre-drawn card names, for
     line 0 (monster names) and 1 (ability names). A name's line is split at dark columns; it is only used when that
-    gives exactly one piece per letter.
+    gives exactly one piece per letter. A letter no such name has falls back on the first piece of the names it starts
+    whose letters touch, when that piece is no wider than a letter: the USA release's only monster name with an "A"
+    is the condensed "Adamantoise".
     """
     palettes = {}
     letters: dict[tuple[int, str], list[list[list[int]]]] = {}
-    for language in LANGUAGES:
+    first_letters: dict[tuple[int, str], list[list[list[int]]]] = {}
+    for language in languages:
         for image_id, texts in _card_names(rom, language).items():
             if image_id not in palettes:
                 palettes[image_id] = _palette_rgb(Pbg(rom.read(card_path(image_id))).palette)
@@ -265,6 +269,11 @@ def harvest_letters(rom: NDSRom) -> dict[tuple[int, str], list[list[list[int]]]]
                     if len(segments) == len(chars):
                         break
                 else:
+                    segments = _segments(rows, rows_range, 240)
+                    if chars and segments:
+                        start, end = segments[0]
+                        first_letters.setdefault((line, chars[0]), []).append(
+                            [[rows[y][x] for y in range(*rows_range)] for x in range(start, end)])
                     continue
                 for char, (start, end) in zip(chars, segments):
                     columns = [[rows[y][x] for y in range(*rows_range)]
@@ -274,6 +283,12 @@ def harvest_letters(rom: NDSRom) -> dict[tuple[int, str], list[list[list[int]]]]
                     while columns and max(columns[-1]) < 40:
                         columns.pop()
                     letters.setdefault((line, char), []).append(columns)
+    for (line, char), pieces in first_letters.items():
+        widest = max((len(columns) for (other_line, _), cut in letters.items() if other_line == line
+                      for columns in cut), default=0)
+        pieces = [columns for columns in pieces if len(columns) <= widest]
+        if (line, char) not in letters and pieces:
+            letters[(line, char)] = pieces
     return letters
 
 
@@ -348,13 +363,13 @@ def extend_card_bin(data: bytes, monster: str, ability: str, description: str) -
     return bytes(out)
 
 
-def new_files(rom: NDSRom) -> dict[str, bytes]:
+def new_files(rom: NDSRom, languages: tuple[str, ...] = LANGUAGES) -> dict[str, bytes]:
     card = card_image(rom)
     ramp = _palette_rgb(Pbg(card).palette)[NAME_RAMP.start:NAME_RAMP.stop]
-    letters = harvest_letters(rom)
+    letters = harvest_letters(rom, languages)
     card_font = Font(rom.read("/card/cardfont.nftr.z"))
     files = {card_path(IMAGE_ID): lz10_compress(card)}
-    for language in LANGUAGES:
+    for language in languages:
         description = "\n".join(card_font.wrap(card_font.clean(DESCRIPTION[language]),
                                                 DESCRIPTION_WIDTH, DESCRIPTION_LINES))
         card_bin = extend_card_bin(rom.read(f"/card/{language}/card.bin.z"), MONSTER, ABILITY[language],
