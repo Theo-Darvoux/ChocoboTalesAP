@@ -43,7 +43,7 @@ class StorybookGoalsRequired(Range):
     display_name = "Storybook Goals Required"
     range_start = 1
     range_end = 112
-    default = 50
+    default = 75
 
 
 class GoldMedalsRequired(Range):
@@ -51,7 +51,7 @@ class GoldMedalsRequired(Range):
     display_name = "Gold Medals Required"
     range_start = 1
     range_end = 23
-    default = 15
+    default = 19
 
 
 class CardsPerChapter(Range):

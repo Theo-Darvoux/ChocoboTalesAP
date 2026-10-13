@@ -11,7 +11,8 @@ First public release. Europe ROM (`AEHP`) only, Archipelago 0.6.7 or newer.
   story chapters, optional boss duel wins and card gifts.
 - Items: the 127 cards (or 26 monster Card Packs), the 15 rescued chocobos, storybook battle / trial modes,
   optional shuffled epilogues.
-- Goals: Story Complete, Chocobo Rescue, Card Collection, Storybook Goals, Gold Medals.
+- Goals: Story Complete, Chocobo Rescue, Card Collection, Storybook Goals (75 by default), Gold Medals (19 by
+  default). The last two defaults need chapter 5.
 - The patched game names the Archipelago item in every reward message, in all five languages, and shows an
   Archipelago card on storybook result screens.
 - Universal Tracker support without a YAML.

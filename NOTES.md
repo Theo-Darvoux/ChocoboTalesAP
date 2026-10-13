@@ -208,9 +208,11 @@ presets use fixed values (the client never tells players which goal a weighted Y
 `chocobo_tales.yaml` (the defaults): 214 checks, 72 filler (33%), 6-8 spheres. `chocobo_tales_compact.yaml`:
 84 checks, 31-34 filler (36-40%); card gifts are off there, since with them 27 of 111 checks were post-ending and
 filler reached 52-54%. `chocobo_tales_epilogues.yaml`: 166 checks, 65-68 filler (39-40%).
-With the Gold Medals goal (and Storybook Goals in the full preset), logic can reach the goal after the first
-sphere: 15 starting cards open chapter 2, where most microgames and many storybooks are. Those goals ask for skill
-more than for items from the multiworld.
+Storybook Goals and Gold Medals defaults were raised (50 -> 75, 15 -> 19) so those goals need chapter 5, like
+most of the story: with 7 goals per book, chapters 1-4 hold 70 storybook checks, and 18 microgames (with their
+chocobo hosts). With every Modes item and chocobo given, logic now needs 27 cards (30 with Card Packs) for either
+goal in all three presets; it was 23 (chapter 4) before. Compact (24 of 32) and Epilogues (50 of 64) already
+required chapter 5. Solo spheres are too coarse to show this: nearly everything opens within two spheres.
 
 ## Still to do
 
